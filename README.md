@@ -59,15 +59,17 @@ _N-1_ микроматчей со всеми остальными команда
 в результате мы получаем функцию потерь.
 3. Для эмбеддингов игроков рассчитывается градиент по функции потерь
 
-<img src="https://render.githubusercontent.com/render/math?math={\mathscr{L}_1 = \left|2\sigma(D) - 1 - R\right|}">
-<br>
+```math
+\mathscr{L}_1 = \left|2\sigma(D) - 1 - R\right|
+```
 
 ```
 loss = torch.abs(torch.sigmoid(delta) * 2 - 1 - result)
 ```
 
-<img src="https://render.githubusercontent.com/render/math?math={\mathscr{L}_2 = log(\sigma(-R \times D)) + (1 - |R|)} \times D^2">
-<br>
+```math
+\mathscr{L}_2 = log(\sigma(-R \times D)) + (1 - |R|)} \times D^2
+```
 
 ```
 loss = -torch.nn.functional.logsigmoid(-result * delta) + (1 - torch.abs(result)) * torch.pow(delta, 2)
