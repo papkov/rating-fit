@@ -11,13 +11,14 @@ class Trainer:
     def __init__(self, name='model',
                  lr=0.1, model=None, optimizer=None, tournament_list=[],
                  clip_zero=True,
-                 checkpoint_path='./checkpoints', save_each=False,
+                 checkpoint_path='./checkpoints', save_each=False, cache=True,
                  jobs=4, batch_size=512):
         # Checkpoints
         self.name = name
         self.checkpoint_path = checkpoint_path
         self.save_each = save_each
         self.history = []
+        self.cache = cache
 
         # Tournaments
         self.tournament_list = tournament_list
@@ -46,7 +47,7 @@ class Trainer:
         """
 
         # TODO: tournament pre-fetcher
-        tournament = Tournament(tournament_id)
+        tournament = Tournament(tournament_id, cache=self.cache)
 
         # Measure correlation before to see whether gradient update took effect
         correlation_before = self.get_prediction_correlation(tournament)
@@ -123,6 +124,7 @@ class Trainer:
             try:
                 loss, correlation_before, correlation_after = self.one_epoch(tournament_id, epoch)
                 self.save_checkpoint(epoch=epoch,
+                                     tournament_id=tournament_id,
                                      loss=loss,
                                      correlation_before=correlation_before,
                                      correlation_after=correlation_after,

@@ -1,6 +1,7 @@
 *.csv
 *.pth
 .idea
+checkpoints
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

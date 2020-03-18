@@ -4,12 +4,14 @@ import requests
 from itertools import combinations
 import numpy as np
 import torch
-
+from pathlib import Path
 
 class Tournament:
-    def __init__(self, tournament_id, max_members=9):
+    def __init__(self, tournament_id, max_members=9, cache=True):
         self.tournament_id = tournament_id
         self.max_members = max_members
+        self.cache = cache
+        self.keep = ["team", "questionsTotal", "position", "teamMembers"]
         # JSON with results and team members
         self.json = self.get_json()
         # Number of participating teams
@@ -23,11 +25,20 @@ class Tournament:
         query = f'http://api.rating.chgk.net/tournaments/{self.tournament_id}/results?' \
                 f'includeTeamMembers=1&includeMasksAndControversials=0&includeTeamFlags=0&includeRatingB=0'
 
-        r = requests.get(query)
-        if r.status_code == 200:
-            return r.json()
+        path = f'./data/{self.tournament_id}.json'
+        if Path(path).exists():
+            with open(path, 'r') as f:
+                return json.load(f)
         else:
-            raise RuntimeError(f'request {query} failed with status code {r.status_code}')
+            r = requests.get(query)
+            if r.status_code == 200:
+                output = [{k: d[k] for k in self.keep} for d in r.json()]
+                if self.cache:
+                    with open(path, 'w+') as f:
+                        json.dump(output, f, indent=2)
+                return output
+            else:
+                raise RuntimeError(f'request {query} failed with status code {r.status_code}')
 
     def get_positions(self):
         return [t['position'] for t in self.json]

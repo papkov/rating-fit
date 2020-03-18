@@ -3,7 +3,7 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, embedding_dim=1, take_best=6, loss='logsigmoid'):
+    def __init__(self, embedding_dim=1, take_best=6, loss='sigmoid'):
         super().__init__()
         assert loss in ('sigmoid', 'logsigmoid'), f'{loss} is invalid input'
         self.loss = loss

@@ -30,12 +30,14 @@ def parse_args():
                         help='Use tournaments until this date (format as 2020-03-16)')
     parser.add_argument('--tournaments', default='./data/tournaments.csv',
                         help='Use preloaded list of tournaments')
+    parser.add_argument('--cache', default=True,
+                        help='Save tournament data')
     # Optimization parameters
     parser.add_argument('--lr', default=0.1, type=float, help='Learning rate')
     parser.add_argument('--wd', default=1e-8, type=float, help='Weight decay')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
     # Training parameters
-    parser.add_argument('--loss', choices=['logsigmoid', 'sigmoid'], default='logsigmoid',
+    parser.add_argument('--loss', choices=['logsigmoid', 'sigmoid'], default='sigmoid',
                         help='Loss function to train a model')
     parser.add_argument('--clip-zero', action='store_true', default=True,
                         help='Shift model embeddings so that min == 0')
@@ -80,6 +82,7 @@ def main():
 
     # Make paths
     Path(args.checkpoint_path).mkdir(parents=True, exist_ok=True)
+    Path('./data').mkdir(parents=True, exist_ok=True)
 
     # Download list of tournaments
     tournaments = download_tournaments(args)
@@ -87,7 +90,7 @@ def main():
     # Fit the model
     model = Model(loss=args.loss, take_best=args.take_best)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.wd)
-    trainer = Trainer(name=args.name, model=model, optimizer=optimizer,
+    trainer = Trainer(name=args.name, model=model, optimizer=optimizer, cache=args.cache,
                       tournament_list=tournaments['id'], save_each=args.save_each,
                       jobs=args.workers, batch_size=args.batch_size)
     trainer.fit()
