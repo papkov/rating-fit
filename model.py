@@ -3,66 +3,83 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, embedding_dim=1):
+    def __init__(self, embedding_dim=1, loss='sigmoid'):
         super().__init__()
+        assert loss in ('sigmoid', 'logsigmoid'), f'{loss} is invalid input'
+        self.loss = loss
         self.embedding_dim = embedding_dim
-        # embedding layer is sparse, it maps a player to a vector
-        self.emb = nn.Embedding(num_embeddings=300000, embedding_dim=embedding_dim, padding_idx=0)
-        # on top of embedding we train a simple linear regression
-        self.neck = nn.Linear(in_features=embedding_dim, out_features=embedding_dim)
-        self.head = nn.Linear(in_features=embedding_dim, out_features=1)
 
-        # Initialize
-        # nn.init.uniform_(self.emb.weight, -1, 1)
-        # nn.init.kaiming_normal_(self.neck.weight, mode='fan_in')
-        # nn.init.kaiming_normal_(self.head.weight, mode='fan_in')
+        # Embedding layer is sparse, it maps a player to a vector (initially zero)
+        self.emb = nn.Embedding(num_embeddings=300000, embedding_dim=embedding_dim, sparse=True)
+        torch.nn.init.zeros_(self.emb.weight)
+
+        # If we want to constrain our weigths, we can apply clipper
+        self.clipper = ZeroClipper()
+
+        # hook to zero out gradient for idx 0
+        def backward_hook(grad):
+            out = grad.clone()
+            out[0] = 0
+            return out
+        self.emb.weight.register_hook(backward_hook)
 
     def get_team_score(self, team):
         # Extract embeddings for each team member
         emb = self.emb(team)  # bs x team_dim -> bs x team_dim x  embedding_dim
         # Sum up team embeddings (all members contributed equally)
-        emb = torch.sum(emb, 1)  # bs x team_dim x embedding_dim -> bs x  embedding_dim
-        # Get score
-        # neck = self.neck(emb)
-        # return self.head(emb)
+        emb = torch.mean(emb, 1)  # bs x team_dim x embedding_dim -> bs x embedding_dim
         return emb
 
     def get_loss(self, score_1, score_2, result):
         """
         Here we want to minimize the ranking error: team with higher score should win by default
         Consider the following cases:
-        1. score_1 > score_2, result == 1: positive input, near-zero loss
-        2. score_1 > score_2, result == -1: negative input, loss >> 0
-        3. result == 0, force scores to be closer TODO: should loss be zero somehow?
+        1. score_1 > score_2, result == 1: positive input, near-zero loss (and vice verse)
+        2. score_1 > score_2, result == -1: negative input, loss >> 0 (and vice versa)
+        3. result == 0, force scores to be closer
         :param score_1: first team score
         :param score_2: second team score
         :param result: 1 if first team wins, -1 if second team wins, 0 if it's a tie
-        :return: log sigmoid loss (details https://pytorch.org/docs/stable/nn.html#torch.nn.LogSigmoid)
+        :return: loss
         """
-        # map scores between 0 and 1 (make them positive)
-        # score_1 = nn.functional.sigmoid(score_1)
-        # score_2 = nn.functional.sigmoid(score_2)
 
-        score = torch.abs(torch.sigmoid(score_1 - score_2) * 2 - 1 - result)
+        # Ultimately, we optimize the delta between two scores with respect to the result
+        delta = score_1 - score_2
 
-        # result = (result + 1) / 2
-        # score = result * score_1 + (1 - result) * score_2
+        if self.loss == 'sigmoid':
+            # Option 1: sigmoid loss
+            # Problems: vanishing gradients
+            score = torch.abs(torch.sigmoid(delta) * 2 - 1 - result)
+        elif self.loss == 'logsigmoid':
+            # Option 2: log sigmoid loss TODO test it
+            # first term optimizes win/lose, second optimizes tie (effective if result == 0)
+            score = -torch.nn.functional.logsigmoid(-result * delta) + (1 - torch.abs(result)) * torch.pow(delta, 2)
+        else:
+            raise ValueError('Invalid loss')
 
-        # score = -torch.log(score)
         return torch.mean(score)
-
-        # score = (score_1 - score_2) * result
-        # return torch.mean(-nn.functional.logsigmoid(score))
 
     def forward(self, team_1, team_2, result):
         # Get team scores
         score_1 = self.get_team_score(team_1)
         score_2 = self.get_team_score(team_2)
 
-        # Clamp the score for better training (from word2vec -- do we need it?)
-        # score_1 = torch.clamp(score_1, max=10, min=-10)
-        # score_2 = torch.clamp(score_2, max=10, min=-10)
-
         # Get loss
         return self.get_loss(score_1, score_2, result)
+
+
+class ZeroClipper(object):
+    """
+    Clips model weights
+    https://discuss.pytorch.org/t/restrict-range-of-variable-during-gradient-descent/1933/3
+    """
+    def __init__(self, max_scale=False):
+        self.max_scale = max_scale
+
+    def __call__(self, module):
+        if hasattr(module, 'weight'):
+            w = module.weight.data
+            w.sub_(torch.min(w))
+            if self.max_scale:
+                w.div_(torch.max(w))
 

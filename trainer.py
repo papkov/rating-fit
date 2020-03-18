@@ -4,27 +4,40 @@ from model import *
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from scipy.stats import spearmanr
+import pandas as pd
 
 
 class Trainer:
-    def __init__(self, lr=0.5, model=None, tournament_list=[]):
+    def __init__(self, name='model',
+                 lr=0.1, model=None, optimizer=None, tournament_list=[],
+                 clip_zero=True,
+                 checkpoint_path='./checkpoints', save_each=False,
+                 jobs=4, batch_size=512):
+        # Checkpoints
+        self.name = name
+        self.checkpoint_path = checkpoint_path
+        self.save_each = save_each
+        self.history = []
+
+        # Tournaments
+        self.tournament_list = tournament_list
+        self.total = len(self.tournament_list)
+
+        # Model
         self.model = Model() if model is None else model
+        # Default lr and other optimization parameters
         self.lr = lr
-        # self.optimizer = torch.optim.SGD([
-        #     {'params': self.model.emb.parameters()},
-        #     {'params': self.model.head.parameters(), 'lr': self.lr}
-        # ], lr=self.lr, momentum=0.9)
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-8) \
+            if optimizer is None else optimizer
+        self.clip_zero = clip_zero
 
         # CUDA usage
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = self.model.to(self.device)
 
-        self.jobs = 4
-        self.bs = 64
-        self.tournament_list = tournament_list
-        self.total = len(self.tournament_list)
-        self.checkpoint_path = './checkpoints/'
+        # For DataLoaders
+        self.jobs = jobs
+        self.bs = batch_size
 
     def one_epoch(self, tournament_id: int, epoch=0):
         """
@@ -37,14 +50,12 @@ class Trainer:
 
         # Measure correlation before to see whether gradient update took effect
         correlation_before = self.get_prediction_correlation(tournament)
+        correlation_after = 0
 
         # Prepare Trainer
         self.model.train()
         # For optimizer, keep embedding LR the same, but scale head LR by number of teams (more teams -> larger LR)
-        # self.optimizer = torch.optim.SGD([
-        #     {'params': self.model.emb.parameters(), 'lr': self.lr},
-        #     {'params': self.model.head.parameters(), 'lr': min(self.lr, self.lr * tournament.n_teams / 100)}
-        # ], lr=self.lr, momentum=0.9)
+        # self.optimizer.lr = self.optimizer.lr * something
         self.optimizer.zero_grad()
 
         # collate_fn = lambda x: collate_match(x, tournament.max_members)
@@ -60,21 +71,25 @@ class Trainer:
             # Do backward step, accumulate loss and gradients
             loss.backward()
             cum_loss += loss.item()
-            postfix = {'loss': f'{cum_loss / (i+1):.4f}'}
-            iterator.set_postfix(postfix)
-            self.optimizer.step()
-            self.optimizer.zero_grad()
 
+            # This condition is needed to update tqdm
             if i == (len(dl_match) - 1):
-                # Perform optimizer step once in an epoch
-                # (otherwise predictions will be affected -- we consider all the matches simultaneous)
+                # Perform optimizer step once in an epoch (we consider all the matches simultaneous)
+                self.optimizer.step()
+                # Clip weights if necessary
+                if self.clip_zero:
+                    self.model.emb.apply(self.model.clipper)
 
                 # Print difference in correlation
                 correlation_after = self.get_prediction_correlation(tournament)
                 postfix = {'loss': f'{cum_loss / (len(dl_match) + 1):.4f}',
                            'corr': f'{correlation_before:.4f} -> {correlation_after:.4f}',
                            }
-                iterator.set_postfix(postfix)
+
+            else:
+                postfix = {'loss': f'{cum_loss / (i + 1):.4f}'}
+
+            iterator.set_postfix(postfix)
 
         return cum_loss / len(dl_match), correlation_before, correlation_after
 
@@ -105,18 +120,32 @@ class Trainer:
 
     def fit(self):
         for epoch, tournament_id in enumerate(self.tournament_list):
-            loss, correlation_before, correlation_after = self.one_epoch(tournament_id, epoch)
-            self.save_checkpoint(loss=loss,
-                                 correlation_before=correlation_before,
-                                 correlation_after=correlation_after,
-                                 epoch=epoch)
+            try:
+                loss, correlation_before, correlation_after = self.one_epoch(tournament_id, epoch)
+                self.save_checkpoint(epoch=epoch,
+                                     loss=loss,
+                                     correlation_before=correlation_before,
+                                     correlation_after=correlation_after,
+                                     )
+            except KeyboardInterrupt:
+                print('\nInterrupted')
+                break
+            except Exception as e:
+                print(f'\nError occurred for epoch {epoch} id{tournament_id}\n{e}')
+                continue
 
-    def save_checkpoint(self, name='checkpoint', **kwargs):
+    def save_checkpoint(self, **kwargs):
+        # Save history
+        self.history.append(kwargs)
+        pd.DataFrame(self.history).to_csv(f'{self.checkpoint_path}/{self.name}.csv')
+
+        # Save state
         state = {
             'model': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
         }
         state.update(kwargs)
-
-        path = f'{self.checkpoint_path}/{name}.pth'
-        torch.save(state, path)
+        name = self.name
+        if self.save_each:
+            name += '_'.join([f'{k}={v}' for k, v in kwargs.items()])
+        torch.save(state, f'{self.checkpoint_path}/{name}.pth')
