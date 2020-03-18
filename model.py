@@ -3,14 +3,15 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, embedding_dim=1, loss='sigmoid'):
+    def __init__(self, embedding_dim=1, take_best=6, loss='logsigmoid'):
         super().__init__()
         assert loss in ('sigmoid', 'logsigmoid'), f'{loss} is invalid input'
         self.loss = loss
+        self.take_best = take_best
         self.embedding_dim = embedding_dim
 
         # Embedding layer is sparse, it maps a player to a vector (initially zero)
-        self.emb = nn.Embedding(num_embeddings=300000, embedding_dim=embedding_dim, sparse=True)
+        self.emb = nn.Embedding(num_embeddings=300000, embedding_dim=embedding_dim)
         torch.nn.init.zeros_(self.emb.weight)
 
         # If we want to constrain our weigths, we can apply clipper
@@ -25,7 +26,10 @@ class Model(nn.Module):
 
     def get_team_score(self, team):
         # Extract embeddings for each team member
-        emb = self.emb(team)  # bs x team_dim -> bs x team_dim x  embedding_dim
+        emb = self.emb(team)  # bs x team_dim -> bs x team_dim x embedding_dim
+        # Take best players by embedding (sort in team_dim)
+        emb, indices = torch.sort(emb, dim=1, descending=True)
+        emb = emb[:, :self.take_best]
         # Sum up team embeddings (all members contributed equally)
         emb = torch.mean(emb, 1)  # bs x team_dim x embedding_dim -> bs x embedding_dim
         return emb
@@ -53,7 +57,7 @@ class Model(nn.Module):
         elif self.loss == 'logsigmoid':
             # Option 2: log sigmoid loss TODO test it
             # first term optimizes win/lose, second optimizes tie (effective if result == 0)
-            score = -torch.nn.functional.logsigmoid(-result * delta) + (1 - torch.abs(result)) * torch.pow(delta, 2)
+            score = -torch.nn.functional.logsigmoid(result * delta) + (1 - torch.abs(result)) * torch.abs(delta)
         else:
             raise ValueError('Invalid loss')
 
@@ -79,7 +83,17 @@ class ZeroClipper(object):
     def __call__(self, module):
         if hasattr(module, 'weight'):
             w = module.weight.data
+            m = torch.max(w)
+            zero_indices = w == 0
             w.sub_(torch.min(w))
+
             if self.max_scale:
+                # either scale everything between 0 and 1
                 w.div_(torch.max(w))
+            else:
+                # or just prevent inflation (max w stays the same)
+                w.div_(torch.max(w) / m)
+
+            # Set zeroes back to zeroes after rescaling
+            w[zero_indices] = 0
 

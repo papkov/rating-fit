@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument('--wd', default=1e-8, type=float, help='Weight decay')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
     # Training parameters
-    parser.add_argument('--loss', choices=['logsigmoid', 'sigmoid'], default='sigmoid',
+    parser.add_argument('--loss', choices=['logsigmoid', 'sigmoid'], default='logsigmoid',
                         help='Loss function to train a model')
     parser.add_argument('--clip-zero', action='store_true', default=True,
                         help='Shift model embeddings so that min == 0')
@@ -43,6 +43,8 @@ def parse_args():
                         help='Batch size for data loaders')
     parser.add_argument('--workers', '-j', default=4, type=int,
                         help='Number of parallel workers in data loaders')
+    parser.add_argument('--take_best', default=6, type=int,
+                        help='Number of best players taken into account')
 
     return parser.parse_args()
 
@@ -50,6 +52,12 @@ def parse_args():
 def save_args(args):
     with open(f'{args.checkpoint_path}/{args.name}.json', 'w') as f:
         json.dump(args.__dict__, f, indent=2)
+
+
+def print_args(args):
+    print('Run with parameters:')
+    for k, v in args.__dict__.items():
+        print(f'{k} = {v}')
 
 
 def download_tournaments(args):
@@ -68,12 +76,16 @@ def main():
     # Parse and cache args under the model name for reproducibility
     args = parse_args()
     save_args(args)
+    print_args(args)
+
+    # Make paths
+    Path(args.checkpoint_path).mkdir(parents=True, exist_ok=True)
 
     # Download list of tournaments
     tournaments = download_tournaments(args)
 
     # Fit the model
-    model = Model(loss=args.loss)
+    model = Model(loss=args.loss, take_best=args.take_best)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.wd)
     trainer = Trainer(name=args.name, model=model, optimizer=optimizer,
                       tournament_list=tournaments['id'], save_each=args.save_each,

@@ -67,11 +67,11 @@ _N-1_ микроматчей со всеми остальными команда
 loss = torch.abs(torch.sigmoid(delta) * 2 - 1 - result)
 ```
 
-<img src="https://render.githubusercontent.com/render/math?math=\mathscr{L}_2 = log(\sigma(-R \times D)) %2B (1 - |R|) \times D^2">
+<img src="https://render.githubusercontent.com/render/math?math=\mathscr{L}_2 = -log(\sigma(R \times D)) %2B (1 - |R|) \times |D|">
 <br>
 
 ```
-loss = -torch.nn.functional.logsigmoid(-result * delta) + (1 - torch.abs(result)) * torch.pow(delta, 2)
+loss = -torch.nn.functional.logsigmoid(result * delta) + (1 - torch.abs(result)) * torch.abs(delta)
 ```
 
 (здесь будет график с функцией потерь)
