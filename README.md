@@ -15,9 +15,10 @@
 python main.py --help
 usage: rating [-h] [--name NAME] [--checkpoint-path CHECKPOINT_PATH]
               [--save-each] [--date-start DATE_START] [--date-end DATE_END]
-              [--tournaments TOURNAMENTS] [--lr LR] [--wd WD]
+              [--tournaments TOURNAMENTS] [--cache CACHE] [--lr LR] [--wd WD]
               [--momentum MOMENTUM] [--loss {logsigmoid,sigmoid}]
-              [--clip-zero]
+              [--clip-zero] [--batch-size BATCH_SIZE] [--workers WORKERS]
+              [--take_best TAKE_BEST]
 
 Model training for player ratings
 
@@ -29,17 +30,25 @@ optional arguments:
   --save-each           Save each epoch (tournament) checkpoint in separate
                         file
   --date-start DATE_START, -s DATE_START
-                        Use tournaments starting this date
+                        Use tournaments starting this date (format as
+                        2012-03-16)
   --date-end DATE_END, -e DATE_END
-                        Use tournaments until this date
+                        Use tournaments until this date (format as 2020-03-16)
   --tournaments TOURNAMENTS
                         Use preloaded list of tournaments
+  --cache CACHE         Save tournament data
   --lr LR               Learning rate
   --wd WD               Weight decay
   --momentum MOMENTUM   Momentum
   --loss {logsigmoid,sigmoid}
                         Loss function to train a model
   --clip-zero           Shift model embeddings so that min == 0
+  --batch-size BATCH_SIZE, -b BATCH_SIZE
+                        Batch size for data loaders
+  --workers WORKERS, -j WORKERS
+                        Number of parallel workers in data loaders
+  --take_best TAKE_BEST
+                        Number of best players taken into account
 
 ```
 

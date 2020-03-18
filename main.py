@@ -77,12 +77,12 @@ def download_tournaments(args):
 def main():
     # Parse and cache args under the model name for reproducibility
     args = parse_args()
-    save_args(args)
     print_args(args)
 
     # Make paths
     Path(args.checkpoint_path).mkdir(parents=True, exist_ok=True)
     Path('./data').mkdir(parents=True, exist_ok=True)
+    save_args(args)
 
     # Download list of tournaments
     tournaments = download_tournaments(args)
