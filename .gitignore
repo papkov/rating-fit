@@ -1,4 +1,4 @@
-*.csv
+*.json
 *.pth
 .idea
 checkpoints
