@@ -34,6 +34,7 @@ class TestCase(unittest.TestCase):
         trainer = Trainer()
         for r in range(repeats):
             trainer.one_epoch(tournament_id)
+            # print(trainer.model.head.weight)
 
     def test_get_questions(self):
         t = Tournament(5923)
