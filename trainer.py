@@ -80,6 +80,10 @@ class Trainer:
                 # Clip weights if necessary
                 if self.clip_zero:
                     self.model.emb.apply(self.model.clipper)
+                # Scale head so the output would always be a weighted average
+                with torch.no_grad():
+                    self.model.head.weight = torch.nn.Parameter(self.model.head.weight /
+                                                                torch.sum(self.model.head.weight), requires_grad=True)
 
                 # Print difference in correlation
                 correlation_after = self.get_prediction_correlation(tournament)

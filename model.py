@@ -3,7 +3,7 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, embedding_dim=1, take_best=6, use_head=True, loss='sigmoid', max_scale=True):
+    def __init__(self, embedding_dim=1, take_best=6, use_head=True, loss='sigmoid', max_scale=False):
         super().__init__()
         assert loss in ('sigmoid', 'logsigmoid'), f'{loss} is invalid input'
         self.loss = loss
@@ -30,6 +30,8 @@ class Model(nn.Module):
             out[0] = 0
             return out
         self.emb.weight.register_hook(backward_hook)
+
+        # Scale head weights
 
     def get_team_score(self, team):
         # Extract embeddings for each team member

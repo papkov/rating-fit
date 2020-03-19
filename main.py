@@ -94,9 +94,9 @@ def main():
     # Model to fit
     model = Model(loss=args.loss, take_best=args.take_best, use_head=args.head)
 
-    # Keep an opportunity to train model parts differently (e.g. head should not decay)
+    # Keep an opportunity to train model parts differently (e.g. head should not decay, it is scaled each step)
     optimizer = torch.optim.SGD([{'params': model.emb.parameters(), 'momentum': args.momentum, 'lr': args.lr},
-                                 {'params': model.head.parameters(),  'momentum': args.momentum, 'lr': args.lr,
+                                 {'params': model.head.parameters(),  'momentum': args.momentum, 'lr': args.lr / 10,
                                   'weight_decay': 0}],
                                 # default values
                                 lr=args.lr, momentum=args.momentum, weight_decay=args.wd)
