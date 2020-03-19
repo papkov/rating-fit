@@ -3,19 +3,25 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, embedding_dim=1, take_best=6, loss='sigmoid'):
+    def __init__(self, embedding_dim=1, take_best=6, use_head=True, loss='sigmoid', max_scale=False):
         super().__init__()
         assert loss in ('sigmoid', 'logsigmoid'), f'{loss} is invalid input'
         self.loss = loss
         self.take_best = take_best
         self.embedding_dim = embedding_dim
+        self.use_head = use_head
 
         # Embedding layer is sparse, it maps a player to a vector (initially zero)
         self.emb = nn.Embedding(num_embeddings=300000, embedding_dim=embedding_dim)
+        self.head = nn.Linear(in_features=take_best, out_features=1)
+        # Initialization
+        # Embeddings are zeros, because we have no prior about the order
         torch.nn.init.zeros_(self.emb.weight)
+        # Head is uniform, because we have no prior about how players of different strength contribute
+        torch.nn.init.constant_(self.head.weight, 1/take_best)
 
-        # If we want to constrain our weigths, we can apply clipper
-        self.clipper = ZeroClipper()
+        # If we want to constrain our weights, we can apply clipper
+        self.clipper = ZeroClipper(max_scale=max_scale)
 
         # hook to zero out gradient for idx 0
         def backward_hook(grad):
@@ -30,8 +36,12 @@ class Model(nn.Module):
         # Take best players by embedding (sort in team_dim)
         emb, indices = torch.sort(emb, dim=1, descending=True)
         emb = emb[:, :self.take_best]
-        # Sum up team embeddings (all members contributed equally)
-        emb = torch.mean(emb, 1)  # bs x team_dim x embedding_dim -> bs x embedding_dim
+        if self.use_head:
+            # Create weights for sorted players
+            emb = self.head(emb.flatten(start_dim=1))  # bs x team_dim x embedding_dim -> bs x embedding_dim
+        else:
+            # Sum up team embeddings (all members contributed equally)
+            emb = torch.mean(emb, 1)  # bs x team_dim x embedding_dim -> bs x embedding_dim
         return emb
 
     def get_loss(self, score_1, score_2, result):

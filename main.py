@@ -47,6 +47,8 @@ def parse_args():
                         help='Number of parallel workers in data loaders')
     parser.add_argument('--take_best', default=6, type=int,
                         help='Number of best players taken into account')
+    parser.add_argument('--head', action='store_true', default=False,
+                        help='Use head with `take_best` weights instead of mean')
 
     return parser.parse_args()
 
@@ -66,7 +68,7 @@ def download_tournaments(args):
     try:
         tournaments = pd.read_csv(args.tournaments)
     except FileNotFoundError:
-        print(f'Tournaments file not fount at {args.tournaments}\n'
+        print(f'Tournaments file not found at {args.tournaments}\n'
               f'Downloading tournaments from {args.date_start} until {args.date_end}')
         tournaments = get_tournaments(args.date_start, args.date_end)
         Path('./data').mkdir(parents=True, exist_ok=True)
@@ -87,9 +89,15 @@ def main():
     # Download list of tournaments
     tournaments = download_tournaments(args)
 
-    # Fit the model
-    model = Model(loss=args.loss, take_best=args.take_best)
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.wd)
+    # Model to fit
+    model = Model(loss=args.loss, take_best=args.take_best, use_head=args.head)
+
+    # Keep an opportunity to train model parts differently
+    optimizer = torch.optim.SGD([{'params': model.emb.parameters(), 'momentum': args.momentum, 'lr': args.lr},
+                                 {'params': model.head.parameters,  'momentum': args.momentum, 'lr': args.lr}],
+                                # default values
+                                lr=args.lr, momentum=args.momentum, weight_decay=args.wd)
+
     trainer = Trainer(name=args.name, model=model, optimizer=optimizer, cache=args.cache,
                       tournament_list=tournaments['id'], save_each=args.save_each,
                       jobs=args.workers, batch_size=args.batch_size)
