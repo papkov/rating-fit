@@ -49,6 +49,8 @@ def parse_args():
                         help='Number of best players taken into account')
     parser.add_argument('--head', action='store_true', default=False,
                         help='Use head with `take_best` weights instead of mean')
+    parser.add_argument('--max-scale', action='store_true', default=False,
+                        help='Scale embeddings between 0 and 1 after each step')
 
     return parser.parse_args()
 

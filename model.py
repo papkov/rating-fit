@@ -3,7 +3,7 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, embedding_dim=1, take_best=6, use_head=True, loss='sigmoid', max_scale=False):
+    def __init__(self, embedding_dim=1, take_best=6, use_head=True, loss='sigmoid', max_scale=True):
         super().__init__()
         assert loss in ('sigmoid', 'logsigmoid'), f'{loss} is invalid input'
         self.loss = loss
@@ -12,8 +12,9 @@ class Model(nn.Module):
         self.use_head = use_head
 
         # Embedding layer is sparse, it maps a player to a vector (initially zero)
-        self.emb = nn.Embedding(num_embeddings=300000, embedding_dim=embedding_dim)
-        self.head = nn.Linear(in_features=take_best, out_features=1)
+        # scale_grad_by_freq makes gradients for big tournaments same as for the small ones
+        self.emb = nn.Embedding(num_embeddings=300000, embedding_dim=embedding_dim, scale_grad_by_freq=True)
+        self.head = nn.Linear(in_features=take_best, out_features=1, bias=False)
         # Initialization
         # Embeddings are zeros, because we have no prior about the order
         torch.nn.init.zeros_(self.emb.weight)
