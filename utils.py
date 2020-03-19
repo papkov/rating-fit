@@ -1,6 +1,8 @@
 import torch
 import pandas as pd
 import requests
+from tqdm import tqdm
+from scipy.stats import spearmanr
 
 
 def embeddings_to_df(path='./checkpoints/checkpoint.pth'):
@@ -26,3 +28,20 @@ def get_tournaments(date_start='2012-03-16', date_end='2020-03-16'):
         print(f'Reading tournaments page {page:04d}', end='\r')
 
     return pd.DataFrame(tournaments)
+
+
+def get_baseline_correlation(tournaments_path='./data/tournaments.csv'):
+    tournaments = pd.read_csv(tournaments_path)
+    query = "http://api.rating.chgk.net/tournaments/{}/results?" \
+            "includeTeamMembers=0&includeMasksAndControversials=0&includeTeamFlags=0&includeRatingB=1"
+    correlations = []
+    for tid in tqdm(tournaments['id'], position=0):
+        try:
+            r = requests.get(query.format(tid)).json()
+            positions = [t['position'] for t in r]
+            predicted = [t['rating']['predictedPosition'] for t in r]
+            correlations.append({'id': tid, 'corr': spearmanr(positions, predicted)[0]})
+        except Exception as e:
+            print(f'Error in id {tid}:', e)
+
+    return pd.DataFrame(correlations)
