@@ -10,8 +10,6 @@ from pathlib import Path
 import json
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
 
 def parse_args():
     parser = argparse.ArgumentParser(prog='rating',
@@ -51,6 +49,9 @@ def parse_args():
                         help='Use head with `take_best` weights instead of mean')
     parser.add_argument('--max-scale', action='store_true', default=False,
                         help='Scale embeddings between 0 and 1 after each step')
+    # GPU
+    parser.add_argument('--gpu', default='0', type=str,
+                        help='GPU to run')
 
     return parser.parse_args()
 
@@ -90,6 +91,9 @@ def main():
 
     # Download list of tournaments
     tournaments = download_tournaments(args)
+
+    # Set GPU to run
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     # Model to fit
     model = Model(loss=args.loss, take_best=args.take_best, use_head=args.head)
